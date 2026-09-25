@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>食物熱量計算器 - 衞生署《熱量知多少》官方數據版</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script type="application/json" id="sayo-db-schema">
+  {
+    "collections": [
+      {
+        "name": "diet_records",
+        "label": "飲食日誌紀錄",
+        "fields": ["id", "dateStr", "totalKcal", "targetKcal", "foodsSummary", "breakfastKcal", "lunchKcal", "dinnerKcal", "snackKcal", "authorUserId", "createdAt"]
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-16">
+  <div class="max-w-4xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-5 border-b border-slate-200 gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="p-2 bg-rose-100 text-rose-600 rounded-xl"><i class="fa-solid fa-fire-burner text-lg"></i></span>
+          <h1 class="text-2xl font-bold text-slate-900 tracking-tight">食物熱量計算器</h1>
+        </div>
+        <p class="text-xs sm:text-sm text-slate-500 mt-1">
+          數據源自香港衞生署《熱量知多少》常見食物熱量含量表，點選食物輕鬆計算每日熱量
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <button id="openHistoryBtn" class="flex-1 sm:flex-none px-3 py-2 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-clock-rotate-left"></i> 查看歷史紀錄
+        </button>
+        <button id="openRefBtn" class="flex-1 sm:flex-none px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-clipboard-check"></i> 衞生署建議攝入標準
+        </button>
+        <button id="clearTodayBtn" class="px-3 py-2 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1.5">
+          <i class="fa-solid fa-rotate-right"></i> 重設今日
+        </button>
+      </div>
+    </header>
+
+    <!-- Calorie Tracker Dashboard -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4 my-5">
+      <!-- Total Intake -->
+      <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div class="flex justify-between items-center text-xs text-slate-500 font-medium">
+          <span>今日已攝取熱量</span>
+          <i class="fa-solid fa-utensils text-rose-500"></i>
+        </div>
+        <div class="my-2">
+          <span id="currentKcal" class="text-3xl font-extrabold text-slate-900">0</span>
+          <span class="text-xs text-slate-400 font-normal"> / <span id="targetKcalDisplay">2000</span> 千卡 (kcal)</span>
+        </div>
+        <div>
+          <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div id="kcalProgressBar" class="bg-emerald-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div class="mt-1.5 flex justify-between text-[11px] text-slate-400">
+            <span id="pctDisplay">0%</span>
+            <span id="remainKcal" class="font-medium text-slate-600">剩餘 2000 千卡</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Meal Breakdown Summary -->
+      <div class="sm:col-span-2 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div class="flex justify-between items-center text-xs text-slate-500 font-medium mb-2">
+          <span>四餐熱量分佈</span>
+          <span class="text-[11px] text-slate-400">點選右側快速跳轉</span>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="bg-amber-50/60 border border-amber-100/80 rounded-xl p-2.5">
+            <span class="text-[11px] text-amber-700 font-medium block">早餐</span>
+            <span id="sumBreakfast" class="text-base font-bold text-slate-800">0</span>
+            <span class="text-[10px] text-slate-400 block">kcal</span>
+          </div>
+          <div class="bg-emerald-50/60 border border-emerald-100/80 rounded-xl p-2.5">
+            <span class="text-[11px] text-emerald-700 font-medium block">午餐</span>
+            <span id="sumLunch" class="text-base font-bold text-slate-800">0</span>
+            <span class="text-[10px] text-slate-400 block">kcal</span>
+          </div>
+          <div class="bg-indigo-50/60 border border-indigo-100/80 rounded-xl p-2.5">
+            <span class="text-[11px] text-indigo-700 font-medium block">晚餐</span>
+            <span id="sumDinner" class="text-base font-bold text-slate-800">0</span>
+            <span class="text-[10px] text-slate-400 block">kcal</span>
+          </div>
+          <div class="bg-orange-50/60 border border-orange-100/80 rounded-xl p-2.5">
+            <span class="text-[11px] text-orange-700 font-medium block">小食/加餐</span>
+            <span id="sumSnack" class="text-base font-bold text-slate-800">0</span>
+            <span class="text-[10px] text-slate-400 block">kcal</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Food Selector from Official PDF -->
+    <section class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-book-open text-rose-500"></i>
+            《熱量知多少》食物清單點選
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">點擊任何食物即可加入飲食記錄，並自訂食用份數</p>
+        </div>
+        <!-- Search bar -->
+        <div class="relative w-full sm:w-64">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+          <input type="text" id="foodSearch" placeholder="搜尋食物（如：白飯、叉燒、燒賣）" class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-rose-400" />
+        </div>
+      </div>
+
+      <!-- Categories Pills -->
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 scrollbar-none" id="categoryPills">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Food Grid List -->
+      <div id="foodGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[360px] overflow-y-auto pr-1">
+        <!-- Food item buttons rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- Daily Logged Meals -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-list-check text-emerald-600"></i>
+          今日飲食記錄明細
+        </h2>
+        <div class="flex items-center gap-2">
+          <button id="saveHistoryBtn" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shadow-indigo-200">
+            <i class="fa-solid fa-bookmark"></i> 儲存今日紀錄
+          </button>
+          <button id="submitRecordBtn" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shadow-sm shadow-emerald-200">
+            <i class="fa-solid fa-cloud-arrow-up"></i> 提交至課堂
+          </button>
+        </div>
+      </div>
+
+      <div id="mealsContainer" class="space-y-3">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+  </div>
+
+  <!-- History Log Modal -->
+  <div id="historyModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+    <div class="bg-white max-w-xl w-full rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i>
+            歷史飲食日誌與回顧
+          </h3>
+          <p class="text-[11px] text-slate-400">已儲存的歷次飲食紀錄，隨時檢視熱量與攝取變化</p>
+        </div>
+        <button id="closeHistoryModal" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+      </div>
+
+      <div class="p-4 overflow-y-auto space-y-3 text-xs" id="historyListContainer">
+        <div class="py-12 text-center text-slate-400">正在載入紀錄...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Food Addition Action Modal -->
+  <div id="addItemModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+    <div class="bg-white max-w-sm w-full rounded-2xl shadow-xl overflow-hidden p-5">
+      <div class="flex justify-between items-start border-b border-slate-100 pb-3">
+        <div>
+          <span id="modalCategoryTag" class="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">穀物類</span>
+          <h3 id="modalFoodName" class="font-bold text-slate-900 text-lg mt-1">白飯</h3>
+          <p id="modalFoodPortion" class="text-xs text-slate-400">1碗 (198克) · 257 千卡</p>
+        </div>
+        <button id="closeAddModal" class="text-slate-400 hover:text-slate-600 text-xl font-light">&times;</button>
+      </div>
+
+      <div class="py-4 space-y-3.5 text-xs">
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">記錄到哪一餐：</label>
+          <div class="grid grid-cols-4 gap-1.5" id="modalMealSelect">
+            <button type="button" data-meal="breakfast" class="meal-opt py-1.5 border rounded-lg text-center font-medium border-slate-200 text-slate-600 hover:border-rose-400">早餐</button>
+            <button type="button" data-meal="lunch" class="meal-opt py-1.5 border rounded-lg text-center font-medium border-rose-500 bg-rose-50 text-rose-700">午餐</button>
+            <button type="button" data-meal="dinner" class="meal-opt py-1.5 border rounded-lg text-center font-medium border-slate-200 text-slate-600 hover:border-rose-400">晚餐</button>
+            <button type="button" data-meal="snack" class="meal-opt py-1.5 border rounded-lg text-center font-medium border-slate-200 text-slate-600 hover:border-rose-400">小食</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-medium text-slate-700 mb-1">食用份量倍數：</label>
+          <div class="flex items-center gap-2">
+            <button type="button" id="qtyMinus" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 text-sm">-</button>
+            <input type="number" id="modalPortionCount" min="0.25" max="10" step="0.25" value="1" class="flex-1 text-center py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-sm text-slate-800" />
+            <button type="button" id="qtyPlus" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 text-sm">+</button>
+          </div>
+          <div class="flex justify-between items-center mt-2 px-1 text-slate-500">
+            <span>計算後熱量：</span>
+            <span class="text-sm font-bold text-rose-600"><span id="modalCalcKcal">257</span> 千卡</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2 flex gap-2">
+        <button id="cancelAddBtn" class="flex-1 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 rounded-lg">取消</button>
+        <button id="confirmAddBtn" class="flex-2 py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs rounded-lg shadow-sm">
+          確定加入
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hong Kong Department of Health Reference Table Modal -->
+  <div id="refModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+    <div class="bg-white max-w-xl w-full rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+            <i class="fa-solid fa-chart-line text-emerald-600"></i>
+            每人每天平均所需熱量（千卡）
+          </h3>
+          <p class="text-[11px] text-slate-400">來源：《中國居民膳食營養素參考攝入量（2023版）》，香港衞生署發佈</p>
+        </div>
+        <button id="closeRefModal" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+      </div>
+
+      <div class="p-4 overflow-y-auto space-y-4 text-xs">
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <p class="font-semibold text-slate-700 mb-2">一鍵套用參考目標值：</p>
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-1">性別</label>
+              <select id="refGender" class="w-full p-1.5 bg-white border border-slate-200 rounded text-xs">
+                <option value="male" selected>男性</option>
+                <option value="female">女性</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-1">年齡群組</label>
+              <select id="refAgeGroup" class="w-full p-1.5 bg-white border border-slate-200 rounded text-xs">
+                <option value="6">6 歲</option>
+                <option value="7">7 歲</option>
+                <option value="8">8 歲</option>
+                <option value="9">9 歲</option>
+                <option value="10">10 歲</option>
+                <option value="11">11 歲</option>
+                <option value="12">12 歲</option>
+                <option value="15">15 歲</option>
+                <option value="18" selected>18 歲或以上 (成年)</option>
+                <option value="50">50 歲或以上</option>
+                <option value="65">65 歲或以上</option>
+                <option value="75">75 歲或以上</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-1">體能活動水平</label>
+              <select id="refActivity" class="w-full p-1.5 bg-white border border-slate-200 rounded text-xs">
+                <option value="light">輕 (辦公/久坐)</option>
+                <option value="medium" selected>中 (一般活動)</option>
+                <option value="high">高 (大量運動/體力勞動)</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-3 flex items-center justify-between">
+            <span class="text-slate-600">對應建議熱量：<strong id="refResultKcal" class="text-rose-600 font-bold text-sm">2550</strong> 千卡</span>
+            <button id="applyRefTargetBtn" class="px-3 py-1 bg-emerald-600 text-white rounded font-medium hover:bg-emerald-700">套用為今日目標</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-center border-collapse text-[11px]">
+            <thead>
+              <tr class="bg-slate-100 text-slate-700">
+                <th class="p-1.5 border border-slate-200">年齡</th>
+                <th colspan="3" class="p-1.5 border border-slate-200 bg-blue-50 text-blue-800">男性 (千卡) [輕 / 中 / 高]</th>
+                <th colspan="3" class="p-1.5 border border-slate-200 bg-pink-50 text-pink-800">女性 (千卡) [輕 / 中 / 高]</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 font-mono text-[10px]">
+              <tr><td class="p-1 font-sans">12 歲</td><td>2300</td><td>2600</td><td>2900</td><td>1950</td><td>2200</td><td>2450</td></tr>
+              <tr><td class="p-1 font-sans">15 歲</td><td>2600</td><td>2950</td><td>3300</td><td>2100</td><td>2350</td><td>2650</td></tr>
+              <tr class="bg-amber-50 font-bold"><td class="p-1 font-sans">18歲或以上</td><td>2150</td><td>2550</td><td>3000</td><td>1700</td><td>2100</td><td>2450</td></tr>
+              <tr><td class="p-1 font-sans">50歲或以上</td><td>1950</td><td>2400</td><td>2800</td><td>1600</td><td>1950</td><td>2300</td></tr>
+              <tr><td class="p-1 font-sans">65歲或以上</td><td>1900</td><td>2300</td><td>-</td><td>1550</td><td>1850</td><td>-</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Complete food dataset directly extracted from the Department of Health PDF "熱量知多少"
+    const FOOD_DATA = [
+      // 穀物類 (Grains)
+      { cat: "grains", catName: "穀物類", name: "全蛋麪 (熟)", portion: "1碗 (200克)", kcal: 276 },
+      { cat: "grains", catName: "穀物類", name: "通心粉 (熟)", portion: "1碗 (175克)", kcal: 277 },
+      { cat: "grains", catName: "穀物類", name: "麥皮 (熟)", portion: "1碗 (293克)", kcal: 208 },
+      { cat: "grains", catName: "穀物類", name: "白粥", portion: "1碗 (200克)", kcal: 64 },
+      { cat: "grains", catName: "穀物類", name: "藜麥 (熟)", portion: "1碗 (232克)", kcal: 278 },
+      { cat: "grains", catName: "穀物類", name: "白飯", portion: "1碗 (198克)", kcal: 257 },
+      { cat: "grains", catName: "穀物類", name: "麥方包", portion: "1片 (47克)", kcal: 122 },
+      { cat: "grains", catName: "穀物類", name: "白方包", portion: "1片 (49克)", kcal: 137 },
+      { cat: "grains", catName: "穀物類", name: "蕎麥麪 (熟)", portion: "1碗 (143克)", kcal: 142 },
+      { cat: "grains", catName: "穀物類", name: "意粉 (熟)", portion: "1碗 (175克)", kcal: 277 },
+
+      // 肉、魚、蛋及代替品 (Meat, Fish, Egg & Alternatives)
+      { cat: "meat", catName: "肉魚蛋代替品", name: "烚紅腰豆", portion: "1湯匙 (11克)", kcal: 14 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "烚黃豆", portion: "1湯匙 (11克)", kcal: 19 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "燜梅頭豬肉 (全瘦)", portion: "100克", kcal: 233 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "燜排骨 (半肥瘦)", portion: "100克", kcal: 397 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "燒牛柳 (瘦)", portion: "100克", kcal: 200 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "罐頭茄汁沙甸魚", portion: "1條 (38克)", kcal: 70 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "罐頭水浸白吞拿魚", portion: "1大罐 (172克)", kcal: 220 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "鱈魚柳 (乾煮)", portion: "1件 (180克)", kcal: 189 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "炸雞髀", portion: "100克", kcal: 250 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "板豆腐", portion: "¼磚 (81克)", kcal: 57 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "炸雞翼", portion: "1隻去骨 (32克)", kcal: 103 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "煎蛋", portion: "1隻大 (46克)", kcal: 90 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "免治豬肉 (熟)", portion: "100克", kcal: 297 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "火腿", portion: "1片 (20克)", kcal: 26 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "烚蛋", portion: "1隻大 (50克)", kcal: 78 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "腸仔", portion: "1條 (35克)", kcal: 95 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "煎豬大排 (去骨半肥瘦)", portion: "1件 (75克)", kcal: 205 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "烤牛肋骨 (去骨半肥瘦)", portion: "100克", kcal: 351 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "烤雞胸肉 (不連皮)", portion: "100克", kcal: 165 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "燒鴨肉 (連皮)", portion: "半隻 (382克)", kcal: 1290 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "燒鴨肉 (不連皮)", portion: "半隻 (221克)", kcal: 444 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "燒鵝肉 (連皮)", portion: "半隻 (774克)", kcal: 2361 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "燒鵝肉 (不連皮)", portion: "半隻 (591克)", kcal: 1407 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "三文魚柳 (乾煮)", portion: "½件 (178克)", kcal: 367 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "蝦 (濕煮)", portion: "4大隻 (22克)", kcal: 22 },
+      { cat: "meat", catName: "肉魚蛋代替品", name: "腐竹", portion: "4件 (29克)", kcal: 134 },
+
+      // 蔬菜類 (Vegetables)
+      { cat: "veg", catName: "蔬菜類", name: "烚西蘭花", portion: "1個中型 (180克)", kcal: 63 },
+      { cat: "veg", catName: "蔬菜類", name: "烚椰菜", portion: "半碗 (82克)", kcal: 19 },
+      { cat: "veg", catName: "蔬菜類", name: "白灼菜心", portion: "半碗 (65克)", kcal: 13 },
+      { cat: "veg", catName: "蔬菜類", name: "白灼生菜", portion: "半碗 (75克)", kcal: 18 },
+      { cat: "veg", catName: "蔬菜類", name: "烚粟米", portion: "1條中型 (103克)", kcal: 99 },
+      { cat: "veg", catName: "蔬菜類", name: "白灼通菜", portion: "半碗 (49克)", kcal: 7 },
+      { cat: "veg", catName: "蔬菜類", name: "熟冬菇", portion: "4粒 (72克)", kcal: 40 },
+      { cat: "veg", catName: "蔬菜類", name: "番茄", portion: "1個 (111克)", kcal: 18 },
+
+      // 水果類 (Fruits)
+      { cat: "fruits", catName: "水果類", name: "牛油果", portion: "1個 (201克)", kcal: 322 },
+      { cat: "fruits", catName: "水果類", name: "香蕉", portion: "1隻中型 (118克)", kcal: 105 },
+      { cat: "fruits", catName: "水果類", name: "哈蜜瓜", portion: "半碗切粒 (87克)", kcal: 30 },
+      { cat: "fruits", catName: "水果類", name: "火龍果", portion: "半個中型 (175克)", kcal: 98 },
+      { cat: "fruits", catName: "水果類", name: "富士蘋果 (連皮)", portion: "1個 (180克)", kcal: 92 },
+      { cat: "fruits", catName: "水果類", name: "提子 (連皮)", portion: "半碗 (81克)", kcal: 56 },
+      { cat: "fruits", catName: "水果類", name: "青奇異果", portion: "1個 (69克)", kcal: 42 },
+      { cat: "fruits", catName: "水果類", name: "橙", portion: "1大個 (184克)", kcal: 86 },
+      { cat: "fruits", catName: "水果類", name: "啤梨 (連皮)", portion: "1個 (230克)", kcal: 117 },
+
+      // 即食粉麪及飯 (Ready-to-eat noodles, pasta and rice)
+      { cat: "dishes", catName: "即食粉麪飯", name: "焗肉醬意粉", portion: "1碗/碟 (588克)", kcal: 823 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "牛腩湯河粉", portion: "1碗 (720克)", kcal: 619 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "乾炒牛肉河粉", portion: "1碟 (650克)", kcal: 910 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "豉油皇炒麪", portion: "1碟 (400克)", kcal: 640 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "揚州炒飯", portion: "1碟 (508克)", kcal: 965 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "沙爹牛肉即食麪", portion: "1碗 (500克)", kcal: 600 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "雲吞麪", portion: "1碗 (630克)", kcal: 447 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "魚蛋湯米粉", portion: "1碗 (700克)", kcal: 406 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "雪菜肉絲湯米粉", portion: "1碗 (420克)", kcal: 332 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "叉燒飯", portion: "1碟 (520克)", kcal: 1040 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "冬菇蒸雞飯", portion: "1碗 (430克)", kcal: 688 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "咖喱牛腩飯", portion: "1碟 (800克)", kcal: 1280 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "粟米肉粒飯", portion: "1碟 (760克)", kcal: 912 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "豉汁鳳爪排骨飯", portion: "1碗 (490克)", kcal: 882 },
+      { cat: "dishes", catName: "即食粉麪飯", name: "魚香茄子飯", portion: "1碟 (720克)", kcal: 1080 },
+
+      // 麪包、蛋糕及糕點 (Bread, cakes and pastries)
+      { cat: "bakery", catName: "麪包糕點", name: "雜款西餅", portion: "1件 (76克)", kcal: 251 },
+      { cat: "bakery", catName: "麪包糕點", name: "芝士漢堡包", portion: "1個 (254克)", kcal: 610 },
+      { cat: "bakery", catName: "麪包糕點", name: "芝士蛋糕", portion: "1件 (126克)", kcal: 403 },
+      { cat: "bakery", catName: "麪包糕點", name: "雞尾包", portion: "1個 (103克)", kcal: 402 },
+      { cat: "bakery", catName: "麪包糕點", name: "牛角包", portion: "1個 (62克)", kcal: 273 },
+      { cat: "bakery", catName: "麪包糕點", name: "咖喱酥皮卷", portion: "1件 (70克)", kcal: 280 },
+      { cat: "bakery", catName: "麪包糕點", name: "丹麥條", portion: "1件 (112克)", kcal: 426 },
+      { cat: "bakery", catName: "麪包糕點", name: "蛋撻", portion: "1個 (70克)", kcal: 217 },
+      { cat: "bakery", catName: "麪包糕點", name: "魚柳包", portion: "1個 (143克)", kcal: 400 },
+      { cat: "bakery", catName: "麪包糕點", name: "腿蛋包", portion: "1個 (106克)", kcal: 265 },
+      { cat: "bakery", catName: "麪包糕點", name: "鬆餅 (Muffin)", portion: "1個 (81克)", kcal: 300 },
+      { cat: "bakery", catName: "麪包糕點", name: "紙包蛋糕", portion: "1個 (72克)", kcal: 238 },
+      { cat: "bakery", catName: "麪包糕點", name: "菠蘿包", portion: "1個 (97克)", kcal: 349 },
+      { cat: "bakery", catName: "麪包糕點", name: "薄餅麪包 (Pizza Bread)", portion: "1片 (115克)", kcal: 299 },
+      { cat: "bakery", catName: "麪包糕點", name: "豬仔包", portion: "1個 (74克)", kcal: 215 },
+      { cat: "bakery", catName: "麪包糕點", name: "肉鬆包", portion: "1個 (89克)", kcal: 294 },
+      { cat: "bakery", catName: "麪包糕點", name: "提子包", portion: "1個 (68克)", kcal: 211 },
+      { cat: "bakery", catName: "麪包糕點", name: "腸仔包", portion: "1個 (96克)", kcal: 278 },
+      { cat: "bakery", catName: "麪包糕點", name: "吞拿魚包", portion: "1個 (106克)", kcal: 286 },
+
+      // 中式點心 (Chinese Dim Sum)
+      { cat: "dimsum", catName: "中式點心", name: "叉燒酥", portion: "1件 (39克)", kcal: 168 },
+      { cat: "dimsum", catName: "中式點心", name: "炸饅頭", portion: "1件 (66克)", kcal: 277 },
+      { cat: "dimsum", catName: "中式點心", name: "鹹水角", portion: "1件 (45克)", kcal: 149 },
+      { cat: "dimsum", catName: "中式點心", name: "芋角", portion: "1件 (40克)", kcal: 144 },
+      { cat: "dimsum", catName: "中式點心", name: "煎蘿蔔糕", portion: "1件 (84克)", kcal: 109 },
+      { cat: "dimsum", catName: "中式點心", name: "春卷", portion: "1件 (35克)", kcal: 112 },
+      { cat: "dimsum", catName: "中式點心", name: "叉燒包", portion: "1件 (55克)", kcal: 143 },
+      { cat: "dimsum", catName: "中式點心", name: "鮮竹卷", portion: "1件 (56克)", kcal: 146 },
+      { cat: "dimsum", catName: "中式點心", name: "雞扎", portion: "1件 (86克)", kcal: 146 },
+      { cat: "dimsum", catName: "中式點心", name: "山竹牛肉", portion: "1件 (49克)", kcal: 88 },
+      { cat: "dimsum", catName: "中式點心", name: "潮州粉果", portion: "1件 (61克)", kcal: 92 },
+      { cat: "dimsum", catName: "中式點心", name: "奶皇包", portion: "1件 (47克)", kcal: 118 },
+      { cat: "dimsum", catName: "中式點心", name: "蝦餃", portion: "1件 (31克)", kcal: 50 },
+      { cat: "dimsum", catName: "中式點心", name: "蛋黃蓮蓉包", portion: "1件 (55克)", kcal: 165 },
+      { cat: "dimsum", catName: "中式點心", name: "小籠包", portion: "1件 (37克)", kcal: 85 },
+      { cat: "dimsum", catName: "中式點心", name: "豬腸粉", portion: "1條 (57克)", kcal: 63 },
+      { cat: "dimsum", catName: "中式點心", name: "牛肉腸粉", portion: "1條 (80克)", kcal: 80 },
+      { cat: "dimsum", catName: "中式點心", name: "燒賣", portion: "1件 (29克)", kcal: 58 },
+      { cat: "dimsum", catName: "中式點心", name: "菜肉包", portion: "1件 (79克)", kcal: 182 },
+      { cat: "dimsum", catName: "中式點心", name: "上素蒸粉果", portion: "1件 (43克)", kcal: 47 },
+      { cat: "dimsum", catName: "中式點心", name: "糯米雞", portion: "1件 (339克)", kcal: 712 },
+
+      // 小食及即食食品 (Snacks & Ready-to-eat)
+      { cat: "snacks", catName: "小食甜品", name: "咖喱魚蛋", portion: "5粒 (50克)", kcal: 65 },
+      { cat: "snacks", catName: "小食甜品", name: "煎釀三寶", portion: "各1件共3件 (102克)", kcal: 112 },
+      { cat: "snacks", catName: "小食甜品", name: "乾焗原味杏仁", portion: "22粒 (28克)", kcal: 167 },
+      { cat: "snacks", catName: "小食甜品", name: "乾焗原味夏威夷果仁", portion: "10-12粒 (28克)", kcal: 201 },
+      { cat: "snacks", catName: "小食甜品", name: "乾焗原味花生", portion: "28粒 (28克)", kcal: 164 },
+      { cat: "snacks", catName: "小食甜品", name: "硬糖", portion: "1粒 (6克)", kcal: 24 },
+      { cat: "snacks", catName: "小食甜品", name: "雪糕", portion: "1杓 (73克)", kcal: 131 },
+      { cat: "snacks", catName: "小食甜品", name: "牛奶朱古力", portion: "1條迷你 (7克)", kcal: 37 },
+      { cat: "snacks", catName: "小食甜品", name: "鳥結糖", portion: "1顆 (12克)", kcal: 52 },
+      { cat: "snacks", catName: "小食甜品", name: "爆谷 (已熟)", portion: "半包 (83克)", kcal: 415 },
+      { cat: "snacks", catName: "小食甜品", name: "椰汁馬豆糕", portion: "1件 (85克)", kcal: 111 },
+      { cat: "snacks", catName: "小食甜品", name: "酥皮忌廉湯", portion: "1碗 (315克)", kcal: 410 },
+      { cat: "snacks", catName: "小食甜品", name: "油炸鬼", portion: "1條 (110克)", kcal: 506 },
+      { cat: "snacks", catName: "小食甜品", name: "芒果布甸", portion: "1份 (183克)", kcal: 168 },
+      { cat: "snacks", catName: "小食甜品", name: "紅豆沙", portion: "1碗 (239克)", kcal: 225 },
+      { cat: "snacks", catName: "小食甜品", name: "芝麻糊", portion: "1碗 (289克)", kcal: 280 },
+      { cat: "snacks", catName: "小食甜品", name: "牛脷酥", portion: "1條 (141克)", kcal: 522 },
+
+      // 飲品 (Drinks)
+      { cat: "drinks", catName: "飲品類", name: "即磨咖啡 (無奶糖)", portion: "1杯 (240毫升)", kcal: 2 },
+      { cat: "drinks", catName: "飲品類", name: "可樂汽水", portion: "1罐 (330毫升)", kcal: 122 },
+      { cat: "drinks", catName: "飲品類", name: "五花茶", portion: "1杯 (240毫升)", kcal: 70 },
+      { cat: "drinks", catName: "飲品類", name: "鮮榨橙汁", portion: "1杯 (240毫升)", kcal: 108 },
+      { cat: "drinks", catName: "飲品類", name: "全脂奶", portion: "1杯 (240毫升)", kcal: 146 },
+      { cat: "drinks", catName: "飲品類", name: "港式咖啡 (不加糖)", portion: "1杯 (240毫升)", kcal: 98 },
+      { cat: "drinks", catName: "飲品類", name: "港式奶茶 (不加糖)", portion: "1杯 (240毫升)", kcal: 106 },
+      { cat: "drinks", catName: "飲品類", name: "熱檸蜜", portion: "1杯 (240毫升)", kcal: 94 },
+      { cat: "drinks", catName: "飲品類", name: "凍檸檬茶", portion: "1杯 (300毫升)", kcal: 138 },
+      { cat: "drinks", catName: "飲品類", name: "凍珍珠奶茶", portion: "1杯 (520毫升)", kcal: 338 },
+      { cat: "drinks", catName: "飲品類", name: "低脂奶", portion: "1杯 (240毫升)", kcal: 101 },
+      { cat: "drinks", catName: "飲品類", name: "奶昔", portion: "1杯 (300毫升)", kcal: 330 },
+      { cat: "drinks", catName: "飲品類", name: "紅豆冰", portion: "1杯 (300毫升)", kcal: 243 },
+      { cat: "drinks", catName: "飲品類", name: "脫脂奶", portion: "1杯 (240毫升)", kcal: 82 },
+      { cat: "drinks", catName: "飲品類", name: "酸梅湯", portion: "1杯 (240毫升)", kcal: 118 },
+      { cat: "drinks", catName: "飲品類", name: "甜豆漿", portion: "1杯 (240毫升)", kcal: 98 },
+      { cat: "drinks", catName: "飲品類", name: "清茶", portion: "1杯 (240毫升)", kcal: 2 },
+      { cat: "drinks", catName: "飲品類", name: "可可粉 (無添加糖)", portion: "1湯匙 (5克)", kcal: 11 },
+
+      // 油脂及其他 (Oils & Others)
+      { cat: "oils", catName: "油脂調味", name: "牛油", portion: "1湯匙 (14克)", kcal: 104 },
+      { cat: "oils", catName: "油脂調味", name: "芥花籽油", portion: "1湯匙 (14克)", kcal: 126 },
+      { cat: "oils", catName: "油脂調味", name: "輕怡蛋黃醬", portion: "1湯匙 (15克)", kcal: 49 },
+      { cat: "oils", catName: "油脂調味", name: "橄欖油", portion: "1湯匙 (14克)", kcal: 126 },
+      { cat: "oils", catName: "油脂調味", name: "花生油", portion: "1湯匙 (14克)", kcal: 126 },
+      { cat: "oils", catName: "油脂調味", name: "芝麻沙律醬", portion: "1湯匙 (15克)", kcal: 66 },
+      { cat: "oils", catName: "油脂調味", name: "薑蓉", portion: "1湯匙 (18克)", kcal: 85 },
+      { cat: "oils", catName: "油脂調味", name: "蜜糖", portion: "1湯匙 (21克)", kcal: 64 },
+      { cat: "oils", catName: "油脂調味", name: "果醬", portion: "1湯匙 (20克)", kcal: 56 },
+      { cat: "oils", catName: "油脂調味", name: "蠔油", portion: "1湯匙 (18克)", kcal: 15 },
+      { cat: "oils", catName: "油脂調味", name: "花生醬", portion: "1湯匙 (16克)", kcal: 94 }
+    ];
+
+    const CATEGORIES = [
+      { id: "all", label: "全部食物" },
+      { id: "grains", label: "穀物類" },
+      { id: "meat", label: "肉魚蛋代替品" },
+      { id: "veg", label: "蔬菜類" },
+      { id: "fruits", label: "水果類" },
+      { id: "dishes", label: "即食粉麪飯" },
+      { id: "bakery", label: "麪包糕點" },
+      { id: "dimsum", label: "中式點心" },
+      { id: "snacks", label: "小食甜品" },
+      { id: "drinks", label: "飲品類" },
+      { id: "oils", label: "油脂調味" }
+    ];
+
+    // Reference intake tables from PDF Page 2
+    const REF_TABLE = {
+      male: {
+        6: { light: 1400, medium: 1600, high: 1800 },
+        7: { light: 1500, medium: 1700, high: 1900 },
+        8: { light: 1600, medium: 1850, high: 2100 },
+        9: { light: 1700, medium: 1950, high: 2200 },
+        10: { light: 1800, medium: 2050, high: 2300 },
+        11: { light: 1900, medium: 2200, high: 2450 },
+        12: { light: 2300, medium: 2600, high: 2900 },
+        15: { light: 2600, medium: 2950, high: 3300 },
+        18: { light: 2150, medium: 2550, high: 3000 },
+        50: { light: 1950, medium: 2400, high: 2800 },
+        65: { light: 1900, medium: 2300, high: 2300 },
+        75: { light: 1800, medium: 2200, high: 2200 }
+      },
+      female: {
+        6: { light: 1300, medium: 1450, high: 1650 },
+        7: { light: 1350, medium: 1550, high: 1750 },
+        8: { light: 1450, medium: 1700, high: 1900 },
+        9: { light: 1550, medium: 1800, high: 2000 },
+        10: { light: 1650, medium: 1900, high: 2100 },
+        11: { light: 1750, medium: 2000, high: 2250 },
+        12: { light: 1950, medium: 2200, high: 2450 },
+        15: { light: 2100, medium: 2350, high: 2650 },
+        18: { light: 1700, medium: 2100, high: 2450 },
+        50: { light: 1600, medium: 1950, high: 2300 },
+        65: { light: 1550, medium: 1850, high: 1850 },
+        75: { light: 1500, medium: 1750, high: 1750 }
+      }
+    };
+
+    const MEAL_CONFIG = {
+      breakfast: { label: "早餐", icon: "fa-sun text-amber-500", bg: "bg-amber-50/50" },
+      lunch: { label: "午餐", icon: "fa-cloud-sun text-emerald-500", bg: "bg-emerald-50/50" },
+      dinner: { label: "晚餐", icon: "fa-moon text-indigo-500", bg: "bg-indigo-50/50" },
+      snack: { label: "小食 / 飲品加餐", icon: "fa-cookie-bite text-orange-500", bg: "bg-orange-50/50" }
+    };
+
+    // State
+    let targetKcal = 2150;
+    let selectedCategory = "all";
+    let activeFoodItem = null;
+    let selectedMealType = "lunch";
+    let loggedFoods = [];
+
+    // DOM
+    const categoryPills = document.getElementById('categoryPills');
+    const foodGrid = document.getElementById('foodGrid');
+    const foodSearch = document.getElementById('foodSearch');
+    const mealsContainer = document.getElementById('mealsContainer');
+
+    // Modal DOM
+    const addItemModal = document.getElementById('addItemModal');
+    const modalCategoryTag = document.getElementById('modalCategoryTag');
+    const modalFoodName = document.getElementById('modalFoodName');
+    const modalFoodPortion = document.getElementById('modalFoodPortion');
+    const modalPortionCount = document.getElementById('modalPortionCount');
+    const modalCalcKcal = document.getElementById('modalCalcKcal');
+    const closeAddModal = document.getElementById('closeAddModal');
+    const cancelAddBtn = document.getElementById('cancelAddBtn');
+    const confirmAddBtn = document.getElementById('confirmAddBtn');
+    const qtyMinus = document.getElementById('qtyMinus');
+    const qtyPlus = document.getElementById('qtyPlus');
+
+    // Ref Modal DOM
+    const refModal = document.getElementById('refModal');
+    const openRefBtn = document.getElementById('openRefBtn');
+    const closeRefModal = document.getElementById('closeRefModal');
+    const refGender = document.getElementById('refGender');
+    const refAgeGroup = document.getElementById('refAgeGroup');
+    const refActivity = document.getElementById('refActivity');
+    const refResultKcal = document.getElementById('refResultKcal');
+    const applyRefTargetBtn = document.getElementById('applyRefTargetBtn');
+    const clearTodayBtn = document.getElementById('clearTodayBtn');
+    const submitRecordBtn = document.getElementById('submitRecordBtn');
+    const saveHistoryBtn = document.getElementById('saveHistoryBtn');
+    const openHistoryBtn = document.getElementById('openHistoryBtn');
+    const historyModal = document.getElementById('historyModal');
+    const closeHistoryModal = document.getElementById('closeHistoryModal');
+    const historyListContainer = document.getElementById('historyListContainer');
+
+    // Storage
+    async function loadSavedData() {
+      try {
+        if (window.sayoStorage) {
+          const savedTarget = await window.sayoStorage.getItem('hk_diet_target');
+          if (savedTarget) targetKcal = parseInt(savedTarget, 10);
+          const savedLogs = await window.sayoStorage.getItem('hk_diet_logs');
+          if (savedLogs) loggedFoods = JSON.parse(savedLogs);
+        } else {
+          const savedTarget = localStorage.getItem('hk_diet_target');
+          if (savedTarget) targetKcal = parseInt(savedTarget, 10);
+          const savedLogs = localStorage.getItem('hk_diet_logs');
+          if (savedLogs) loggedFoods = JSON.parse(savedLogs);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      renderCategoryPills();
+      renderFoodGrid();
+      renderMealsList();
+      updateDashboard();
+    }
+
+    async function saveData() {
+      try {
+        if (window.sayoStorage) {
+          await window.sayoStorage.setItem('hk_diet_target', targetKcal.toString());
+          await window.sayoStorage.setItem('hk_diet_logs', JSON.stringify(loggedFoods));
+        } else {
+          localStorage.setItem('hk_diet_target', targetKcal.toString());
+          localStorage.setItem('hk_diet_logs', JSON.stringify(loggedFoods));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Category pills render
+    function renderCategoryPills() {
+      categoryPills.innerHTML = '';
+      CATEGORIES.forEach(c => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const isActive = c.id === selectedCategory;
+        btn.className = `px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+          isActive 
+            ? 'bg-rose-600 text-white shadow-xs' 
+            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        }`;
+        btn.textContent = c.label;
+        btn.addEventListener('click', () => {
+          selectedCategory = c.id;
+          renderCategoryPills();
+          renderFoodGrid();
+        });
+        categoryPills.appendChild(btn);
+      });
+    }
+
+    // Food grid render
+    function renderFoodGrid() {
+      const q = foodSearch.value.trim().toLowerCase();
+      foodGrid.innerHTML = '';
+
+      const filtered = FOOD_DATA.filter(item => {
+        const matchCat = (selectedCategory === 'all') || (item.cat === selectedCategory);
+        const matchQuery = !q || item.name.toLowerCase().includes(q) || item.portion.toLowerCase().includes(q);
+        return matchCat && matchQuery;
+      });
+
+      if (filtered.length === 0) {
+        foodGrid.innerHTML = `<div class="col-span-full py-8 text-center text-xs text-slate-400">找不到相符的食物項目</div>`;
+        return;
+      }
+
+      filtered.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'group p-3 border border-slate-200 rounded-xl hover:border-rose-400 hover:shadow-xs transition-all cursor-pointer bg-white flex items-center justify-between gap-2';
+        card.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="font-semibold text-xs text-slate-800 group-hover:text-rose-600 truncate transition-colors">${item.name}</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-0.5 truncate">${item.portion}</div>
+          </div>
+          <div class="text-right shrink-0">
+            <span class="text-xs font-bold text-rose-600">${item.kcal}</span>
+            <span class="text-[10px] text-slate-400 block -mt-0.5">kcal</span>
+          </div>
+        `;
+        card.addEventListener('click', () => openAddDialog(item));
+        foodGrid.appendChild(card);
+      });
+    }
+
+    foodSearch.addEventListener('input', () => {
+      renderFoodGrid();
+    });
+
+    // Add dialog open
+    function openAddDialog(item) {
+      activeFoodItem = item;
+      modalCategoryTag.textContent = item.catName;
+      modalFoodName.textContent = item.name;
+      modalFoodPortion.textContent = `${item.portion} · ${item.kcal} 千卡/份`;
+      modalPortionCount.value = 1;
+      modalCalcKcal.textContent = item.kcal;
+
+      // Select default meal option
+      document.querySelectorAll('#modalMealSelect .meal-opt').forEach(btn => {
+        if (btn.getAttribute('data-meal') === selectedMealType) {
+          btn.className = 'meal-opt py-1.5 border rounded-lg text-center font-medium border-rose-500 bg-rose-50 text-rose-700';
+        } else {
+          btn.className = 'meal-opt py-1.5 border rounded-lg text-center font-medium border-slate-200 text-slate-600 hover:border-rose-400';
+        }
+      });
+
+      addItemModal.classList.remove('hidden');
+      addItemModal.classList.add('flex');
+    }
+
+    function closeAddDialog() {
+      addItemModal.classList.add('hidden');
+      addItemModal.classList.remove('flex');
+      activeFoodItem = null;
+    }
+
+    closeAddModal.addEventListener('click', closeAddDialog);
+    cancelAddBtn.addEventListener('click', closeAddDialog);
+
+    // Meal select inside modal
+    document.querySelectorAll('#modalMealSelect .meal-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedMealType = btn.getAttribute('data-meal');
+        document.querySelectorAll('#modalMealSelect .meal-opt').forEach(b => {
+          b.className = 'meal-opt py-1.5 border rounded-lg text-center font-medium border-slate-200 text-slate-600 hover:border-rose-400';
+        });
+        btn.className = 'meal-opt py-1.5 border rounded-lg text-center font-medium border-rose-500 bg-rose-50 text-rose-700';
+      });
+    });
+
+    // Portion count calculation
+    function recalcModalKcal() {
+      if (!activeFoodItem) return;
+      let count = parseFloat(modalPortionCount.value) || 1;
+      if (count <= 0) count = 0.25;
+      const total = Math.round(activeFoodItem.kcal * count);
+      modalCalcKcal.textContent = total;
+    }
+
+    modalPortionCount.addEventListener('input', recalcModalKcal);
+    qtyMinus.addEventListener('click', () => {
+      let val = parseFloat(modalPortionCount.value) || 1;
+      val = Math.max(0.25, val - 0.25);
+      modalPortionCount.value = val;
+      recalcModalKcal();
+    });
+    qtyPlus.addEventListener('click', () => {
+      let val = parseFloat(modalPortionCount.value) || 1;
+      val = Math.min(10, val + 0.25);
+      modalPortionCount.value = val;
+      recalcModalKcal();
+    });
+
+    // Confirm Add
+    confirmAddBtn.addEventListener('click', () => {
+      if (!activeFoodItem) return;
+      const count = parseFloat(modalPortionCount.value) || 1;
+      const finalKcal = Math.round(activeFoodItem.kcal * count);
+
+      const record = {
+        id: 'food_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        meal: selectedMealType,
+        name: activeFoodItem.name,
+        basePortion: activeFoodItem.portion,
+        multiplier: count,
+        kcal: finalKcal,
+        addedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      loggedFoods.push(record);
+      saveData();
+      renderMealsList();
+      updateDashboard();
+      closeAddDialog();
+    });
+
+    // Render Meals
+    function renderMealsList() {
+      mealsContainer.innerHTML = '';
+      const mealKeys = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+      mealKeys.forEach(key => {
+        const cfg = MEAL_CONFIG[key];
+        const items = loggedFoods.filter(f => f.meal === key);
+        const subtotal = items.reduce((acc, cur) => acc + cur.kcal, 0);
+
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs';
+
+        let listHtml = '';
+        if (items.length === 0) {
+          listHtml = `<div class="p-3.5 text-center text-xs text-slate-400">尚未加入食物</div>`;
+        } else {
+          listHtml = `<div class="divide-y divide-slate-100">
+            ${items.map(it => `
+              <div class="px-4 py-2.5 flex items-center justify-between text-xs hover:bg-slate-50/80 transition-colors">
+                <div class="flex-1 min-w-0 pr-2">
+                  <div class="font-semibold text-slate-800 truncate">${it.name}</div>
+                  <div class="text-[11px] text-slate-400">
+                    標準份量: ${it.basePortion} × <span class="text-rose-600 font-semibold">${it.multiplier} 份</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="font-bold text-slate-700 font-mono text-sm">${it.kcal} <span class="text-[10px] text-slate-400 font-normal">kcal</span></span>
+                  <button data-id="${it.id}" class="del-item-btn text-slate-300 hover:text-rose-500 p-1 transition-colors" title="刪除">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </div>
+              </div>
+            `).join('')}
+          </div>`;
+        }
+
+        card.innerHTML = `
+          <div class="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between ${cfg.bg}">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid ${cfg.icon} text-sm"></i>
+              <span class="font-bold text-xs text-slate-800">${cfg.label}</span>
+              <span class="text-[11px] text-slate-400">(${items.length} 項)</span>
+            </div>
+            <span class="text-xs font-bold text-slate-700">${subtotal} kcal</span>
+          </div>
+          ${listHtml}
+        `;
+
+        mealsContainer.appendChild(card);
+      });
+
+      // Bind delete buttons
+      document.querySelectorAll('.del-item-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          loggedFoods = loggedFoods.filter(f => f.id !== id);
+          saveData();
+          renderMealsList();
+          updateDashboard();
+        });
+      });
+    }
+
+    // Update Dashboard
+    function updateDashboard() {
+      let total = 0;
+      let bFast = 0, lFast = 0, dFast = 0, sFast = 0;
+
+      loggedFoods.forEach(f => {
+        total += f.kcal;
+        if (f.meal === 'breakfast') bFast += f.kcal;
+        if (f.meal === 'lunch') lFast += f.kcal;
+        if (f.meal === 'dinner') dFast += f.kcal;
+        if (f.meal === 'snack') sFast += f.kcal;
+      });
+
+      document.getElementById('currentKcal').textContent = total;
+      document.getElementById('targetKcalDisplay').textContent = targetKcal;
+      document.getElementById('sumBreakfast').textContent = bFast;
+      document.getElementById('sumLunch').textContent = lFast;
+      document.getElementById('sumDinner').textContent = dFast;
+      document.getElementById('sumSnack').textContent = sFast;
+
+      const pct = Math.min(100, Math.round((total / targetKcal) * 100));
+      document.getElementById('pctDisplay').textContent = `${pct}% 已用`;
+
+      const progressBar = document.getElementById('kcalProgressBar');
+      progressBar.style.width = `${pct}%`;
+      if (total > targetKcal) {
+        progressBar.className = 'bg-rose-500 h-2.5 rounded-full transition-all duration-300';
+      } else if (pct > 85) {
+        progressBar.className = 'bg-amber-500 h-2.5 rounded-full transition-all duration-300';
+      } else {
+        progressBar.className = 'bg-emerald-500 h-2.5 rounded-full transition-all duration-300';
+      }
+
+      const diff = targetKcal - total;
+      const remainEl = document.getElementById('remainKcal');
+      if (diff >= 0) {
+        remainEl.textContent = `剩餘 ${diff} 千卡`;
+        remainEl.className = 'font-medium text-slate-600';
+      } else {
+        remainEl.textContent = `超標 ${Math.abs(diff)} 千卡`;
+        remainEl.className = 'font-bold text-rose-600';
+      }
+    }
+
+    // Reset Day
+    clearTodayBtn.addEventListener('click', () => {
+      if (loggedFoods.length === 0) return;
+      if (confirm('確定要清空今天記錄的所有食物嗎？')) {
+        loggedFoods = [];
+        saveData();
+        renderMealsList();
+        updateDashboard();
+      }
+    });
+
+    // Reference intake modal
+    openRefBtn.addEventListener('click', () => {
+      refModal.classList.remove('hidden');
+      refModal.classList.add('flex');
+      updateRefCalc();
+    });
+
+    function closeRef() {
+      refModal.classList.add('hidden');
+      refModal.classList.remove('flex');
+    }
+
+    closeRefModal.addEventListener('click', closeRef);
+
+    function updateRefCalc() {
+      const g = refGender.value;
+      const a = parseInt(refAgeGroup.value, 10);
+      const act = refActivity.value;
+
+      const group = REF_TABLE[g] && REF_TABLE[g][a];
+      if (group && group[act]) {
+        refResultKcal.textContent = group[act];
+      }
+    }
+
+    refGender.addEventListener('change', updateRefCalc);
+    refAgeGroup.addEventListener('change', updateRefCalc);
+    refActivity.addEventListener('change', updateRefCalc);
+
+    applyRefTargetBtn.addEventListener('click', () => {
+      const val = parseInt(refResultKcal.textContent, 10);
+      if (val > 0) {
+        targetKcal = val;
+        saveData();
+        updateDashboard();
+        closeRef();
+      }
+    });
+
+    // Submit to classroom
+    submitRecordBtn.addEventListener('click', async () => {
+      if (loggedFoods.length === 0) {
+        alert('請先在清單中點選食物加入今日紀錄再提交。');
+        return;
+      }
+
+      const totalKcal = loggedFoods.reduce((acc, cur) => acc + cur.kcal, 0);
+      const mealDetails = loggedFoods.map(f => `${f.name} (${f.multiplier}份: ${f.kcal}kcal)`).join(', ');
+
+      submitRecordBtn.disabled = true;
+      submitRecordBtn.textContent = '提交中...';
+
+      try {
+        if (window.sayoSubmit) {
+          const res = await window.sayoSubmit({
+            responses: [
+              { question: "今日飲食總攝取熱量 (千卡)", answer: `${totalKcal} kcal (目標: ${targetKcal} kcal)`, type: "short-answer" },
+              { question: "今日進食清單明細", answer: mealDetails, type: "short-answer" },
+              { question: "餐別熱量統計", answer: `早餐: ${document.getElementById('sumBreakfast').textContent} kcal, 午餐: ${document.getElementById('sumLunch').textContent} kcal, 晚餐: ${document.getElementById('sumDinner').textContent} kcal, 小食: ${document.getElementById('sumSnack').textContent} kcal`, type: "short-answer" }
+            ]
+          });
+
+          if (res && res.ok) {
+            alert('飲食日記已成功提交至課堂！');
+            submitRecordBtn.textContent = '已成功提交';
+            return;
+          }
+        }
+        alert(`今日飲食紀錄總結：共 ${totalKcal} 千卡（目標 ${targetKcal} 千卡）。`);
+        submitRecordBtn.textContent = '今日已完成';
+      } catch (err) {
+        console.error(err);
+        submitRecordBtn.disabled = false;
+        submitRecordBtn.textContent = '重新提交紀錄';
+        alert('提交時發生問題，請稍候重試。');
+      }
+    });
+
+    // Save Today to History
+    saveHistoryBtn.addEventListener('click', async () => {
+      if (loggedFoods.length === 0) {
+        alert('今日尚無任何食物紀錄，請先點選食物加入。');
+        return;
+      }
+
+      const totalKcal = loggedFoods.reduce((acc, cur) => acc + cur.kcal, 0);
+      const foodsSummary = loggedFoods.map(f => `${f.name} (${f.multiplier}份: ${f.kcal}kcal)`).join('、');
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      saveHistoryBtn.disabled = true;
+      saveHistoryBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 儲存中...';
+
+      const entry = {
+        id: 'rec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        dateStr: dateStr,
+        totalKcal: totalKcal,
+        targetKcal: targetKcal,
+        foodsSummary: foodsSummary,
+        breakfastKcal: parseInt(document.getElementById('sumBreakfast').textContent, 10) || 0,
+        lunchKcal: parseInt(document.getElementById('sumLunch').textContent, 10) || 0,
+        dinnerKcal: parseInt(document.getElementById('sumDinner').textContent, 10) || 0,
+        snackKcal: parseInt(document.getElementById('sumSnack').textContent, 10) || 0,
+        createdAt: now.toISOString()
+      };
+
+      try {
+        if (window.sayoDb) {
+          entry.authorUserId = await window.sayoDb.getUserId();
+          const result = await window.sayoDb.append('diet_records', entry);
+          if (!result || !result.ok) {
+            alert('儲存失敗：' + (result?.code || '無法寫入紀錄'));
+            saveHistoryBtn.disabled = false;
+            saveHistoryBtn.innerHTML = '<i class="fa-solid fa-bookmark"></i> 儲存今日紀錄';
+            return;
+          }
+        } else {
+          // Fallback to local storage list
+          const raw = localStorage.getItem('hk_diet_history_local') || '[]';
+          const list = JSON.parse(raw);
+          list.unshift(entry);
+          localStorage.setItem('hk_diet_history_local', JSON.stringify(list));
+        }
+
+        saveHistoryBtn.innerHTML = '<i class="fa-solid fa-check"></i> 已儲存！';
+        setTimeout(() => {
+          saveHistoryBtn.disabled = false;
+          saveHistoryBtn.innerHTML = '<i class="fa-solid fa-bookmark"></i> 儲存今日紀錄';
+        }, 2000);
+      } catch (err) {
+        console.error(err);
+        alert('儲存時發生錯誤，請稍後重試。');
+        saveHistoryBtn.disabled = false;
+        saveHistoryBtn.innerHTML = '<i class="fa-solid fa-bookmark"></i> 儲存今日紀錄';
+      }
+    });
+
+    // History Modal
+    openHistoryBtn.addEventListener('click', () => {
+      historyModal.classList.remove('hidden');
+      historyModal.classList.add('flex');
+      loadHistoryList();
+    });
+
+    closeHistoryModal.addEventListener('click', () => {
+      historyModal.classList.add('hidden');
+      historyModal.classList.remove('flex');
+    });
+
+    async function loadHistoryList() {
+      historyListContainer.innerHTML = '<div class="py-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-base mb-2 block"></i>讀取歷史紀錄中...</div>';
+
+      try {
+        let records = [];
+        let isOwner = false;
+
+        if (window.sayoDb) {
+          records = await window.sayoDb.getAll('diet_records');
+          isOwner = await window.sayoDb.isOwner();
+        } else {
+          const raw = localStorage.getItem('hk_diet_history_local') || '[]';
+          records = JSON.parse(raw);
+          isOwner = true;
+        }
+
+        // Sort by createdAt desc
+        records.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+        if (!records || records.length === 0) {
+          historyListContainer.innerHTML = `
+            <div class="py-12 text-center text-slate-400">
+              <i class="fa-regular fa-folder-open text-2xl text-slate-300 mb-2 block"></i>
+              尚無儲存的飲食日誌紀錄，點擊「儲存今日紀錄」即可留存！
+            </div>
+          `;
+          return;
+        }
+
+        historyListContainer.innerHTML = '';
+        records.forEach(rec => {
+          const card = document.createElement('div');
+          card.className = 'p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2';
+
+          const pct = Math.round((rec.totalKcal / rec.targetKcal) * 100);
+          const isOver = rec.totalKcal > rec.targetKcal;
+
+          const header = document.createElement('div');
+          header.className = 'flex items-center justify-between';
+
+          const dateTitle = document.createElement('div');
+          dateTitle.className = 'font-bold text-slate-800 flex items-center gap-1.5';
+          dateTitle.innerHTML = `<i class="fa-regular fa-calendar text-indigo-500"></i> ${rec.dateStr || '歷史紀錄'}`;
+
+          const kcalBadge = document.createElement('div');
+          kcalBadge.className = 'text-right';
+          kcalBadge.innerHTML = `
+            <span class="font-extrabold ${isOver ? 'text-rose-600' : 'text-emerald-600'} text-sm">${rec.totalKcal}</span>
+            <span class="text-[10px] text-slate-400">/ ${rec.targetKcal} kcal (${pct}%)</span>
+          `;
+
+          header.appendChild(dateTitle);
+          header.appendChild(kcalBadge);
+
+          const breakdown = document.createElement('div');
+          breakdown.className = 'grid grid-cols-4 gap-1 text-[10px] text-center bg-white p-1.5 rounded-lg border border-slate-100 text-slate-600';
+          breakdown.innerHTML = `
+            <div>早: <span class="font-bold">${rec.breakfastKcal || 0}</span></div>
+            <div>午: <span class="font-bold">${rec.lunchKcal || 0}</span></div>
+            <div>晚: <span class="font-bold">${rec.dinnerKcal || 0}</span></div>
+            <div>小食: <span class="font-bold">${rec.snackKcal || 0}</span></div>
+          `;
+
+          const summary = document.createElement('p');
+          summary.className = 'text-[11px] text-slate-500 line-clamp-2 leading-relaxed';
+          summary.textContent = '食物明細：' + (rec.foodsSummary || '無');
+
+          card.appendChild(header);
+          card.appendChild(breakdown);
+          card.appendChild(summary);
+
+          // Admin delete button if owner
+          if (isOwner && window.sayoDb) {
+            const delBtn = document.createElement('button');
+            delBtn.className = 'text-[11px] text-rose-500 hover:text-rose-700 font-medium inline-flex items-center gap-1 mt-1';
+            delBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> 刪除此條紀錄';
+            delBtn.onclick = async () => {
+              if (confirm('確定要刪除這筆歷史飲食紀錄嗎？')) {
+                const delRes = await window.sayoDb.adminDelete('diet_records', rec.id, rec.authorUserId);
+                if (delRes && delRes.ok) {
+                  loadHistoryList();
+                } else {
+                  alert('刪除失敗');
+                }
+              }
+            };
+            card.appendChild(delBtn);
+          }
+
+          historyListContainer.appendChild(card);
+        });
+      } catch (err) {
+        console.error(err);
+        historyListContainer.innerHTML = '<div class="py-8 text-center text-rose-500">載入歷史紀錄失敗，請稍後重試。</div>';
+      }
+    }
+
+    // Init
+    loadSavedData();
+  </script>
+</body>
+</html>
